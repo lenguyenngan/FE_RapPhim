@@ -10,7 +10,7 @@ const Home = () => {
     // Kiểm tra authentication
     const token = localStorage.getItem("token");
     const userData = localStorage.getItem("user");
-    const role = localStorage.getItem("role");
+    // const role = localStorage.getItem("role");
 
     if (!token || !userData) {
       navigate("/login");
@@ -141,7 +141,7 @@ const Home = () => {
                 CINEMA HOME
               </h1>
               <p className="text-gray-300 mt-2">
-                Chào mừng đến với hệ thống quản lý rạp phim
+                Chào mừng đến với rạp phim Cinema Home{" "}
               </p>
             </div>
 
@@ -149,8 +149,28 @@ const Home = () => {
               <div className="text-white text-right">
                 <p className="text-sm text-gray-400">Xin chào,</p>
                 <p className="font-semibold">{user?.fullName}</p>
-                <p className="text-xs text-purple-300">Role: {user?.role}</p>
               </div>
+              <button
+                onClick={() => navigate("/profile")}
+                className="w-10 h-10 rounded-full overflow-hidden border border-white/30 hover:scale-105 transition-transform"
+                title="Quản lý hồ sơ"
+              >
+                {user?.avatar ? (
+                  <img
+                    src={user.avatar}
+                    alt="avatar"
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <img
+                    src={`https://ui-avatars.com/api/?name=${encodeURIComponent(
+                      user?.fullName || "U"
+                    )}&background=8B5CF6&color=fff`}
+                    alt="avatar"
+                    className="w-full h-full object-cover"
+                  />
+                )}
+              </button>
 
               <button
                 onClick={handleLogout}

@@ -1,33 +1,24 @@
 import axios from "axios";
 
+// Base URL trùng với backend
 const API = axios.create({
-  baseURL: "http://localhost:5000/api", // BE port 5000
-  timeout: 10000, // 10 seconds timeout
+  baseURL: "http://localhost:5000/api",
+  timeout: 10000,
   headers: {
     "Content-Type": "application/json",
   },
-  withCredentials: true, // Enable credentials for CORS
+  withCredentials: true,
 });
 
-// Request interceptor
+// Request interceptor: tự động gửi token nếu có
 API.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem("token");
-
-    // 🔑 Chỉ gắn token khi không phải login/register
-    if (
-      token &&
-      !config.url.includes("/auth/login") &&
-      !config.url.includes("/auth/register")
-    ) {
+    if (token) {
       config.headers.Authorization = `Bearer ${token}`;
-    } else {
-      // Xoá Authorization nếu là login/register để tránh lỗi 431
-      delete config.headers.Authorization;
     }
-
     console.log(
-      "API Request:",
+      "📤 API Request:",
       config.method?.toUpperCase(),
       config.url,
       config.data
@@ -35,26 +26,26 @@ API.interceptors.request.use(
     return config;
   },
   (error) => {
-    console.error("Request Error:", error);
+    console.error("🚨 Request Error:", error);
     return Promise.reject(error);
   }
 );
 
-// Response interceptor
 API.interceptors.response.use(
   (response) => {
-    console.log("API Response:", response.status, response.data);
+    console.log("📥 API Response:", response.status, response.data);
     return response;
   },
   (error) => {
-    console.error("Response Error:", error);
-
-    // Handle network errors
+    console.error(
+      "🚨 Response Error:",
+      error.response?.status,
+      error.response?.data || error.message
+    );
     if (error.code === "ECONNREFUSED" || error.code === "ERR_NETWORK") {
       error.message =
-        "Không thể kết nối đến server. Vui lòng kiểm tra server có đang chạy trên port 5000 không.";
+        "Không thể kết nối đến server. Hãy chắc chắn backend đang chạy trên port 5000";
     }
-
     return Promise.reject(error);
   }
 );
