@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import API from "../../api";
 
 const Dashboard = () => {
   const [user, setUser] = useState(null);
@@ -39,17 +40,23 @@ const Dashboard = () => {
       navigate("/login");
     }
 
-    // Simulate loading stats
-    setTimeout(() => {
-      setStats({
-        totalUsers: 1250,
-        totalMovies: 45,
-        totalBookings: 3240,
-        totalRevenue: 125000000,
-      });
-    }, 1000);
-
-    setLoading(false);
+    // Load realtime stats from API
+    const loadStats = async () => {
+      try {
+        const [usersRes, moviesRes] = await Promise.all([
+          API.get("/users"),
+          API.get("/movies"),
+        ]);
+        const totalUsers = (usersRes.data?.users || []).length;
+        const totalMovies = (moviesRes.data?.movies || []).length;
+        setStats((s) => ({ ...s, totalUsers, totalMovies }));
+      } catch (e) {
+        console.error("Load stats failed", e);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadStats();
   }, [navigate]);
 
   const handleLogout = () => {
@@ -178,7 +185,6 @@ const Dashboard = () => {
               <div className="text-white text-right">
                 <p className="text-sm text-gray-400">Admin,</p>
                 <p className="font-semibold">{user?.fullName}</p>
-                <p className="text-xs text-red-300">Role: {user?.role}</p>
               </div>
 
               <button
@@ -344,7 +350,10 @@ const Dashboard = () => {
           {/* Admin Actions */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
             {/* User Management */}
-            <div className="bg-white/10 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/20 p-6 hover:scale-105 transition-all duration-300 cursor-pointer">
+            <div
+              onClick={() => navigate("/admin/users")}
+              className="bg-white/10 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/20 p-6 hover:scale-105 transition-all duration-300 cursor-pointer"
+            >
               <div className="flex items-center mb-4">
                 <div className="w-12 h-12 bg-purple-500/20 rounded-xl flex items-center justify-center mr-4">
                   <svg
@@ -368,13 +377,19 @@ const Dashboard = () => {
               <p className="text-gray-300 mb-4">
                 Xem và quản lý tài khoản người dùng
               </p>
-              <button className="w-full px-4 py-2 bg-purple-500/20 border border-purple-500/50 rounded-xl text-purple-300 hover:bg-purple-500/30 transition-all duration-300">
+              <button
+                onClick={() => navigate("/admin/users")}
+                className="w-full px-4 py-2 bg-purple-500/20 border border-purple-500/50 rounded-xl text-purple-300 hover:bg-purple-500/30 transition-all duration-300"
+              >
                 Quản lý
               </button>
             </div>
 
             {/* Movie Management */}
-            <div className="bg-white/10 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/20 p-6 hover:scale-105 transition-all duration-300 cursor-pointer">
+            <div
+              onClick={() => navigate("/admin/movies")}
+              className="bg-white/10 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/20 p-6 hover:scale-105 transition-all duration-300 cursor-pointer"
+            >
               <div className="flex items-center mb-4">
                 <div className="w-12 h-12 bg-blue-500/20 rounded-xl flex items-center justify-center mr-4">
                   <svg
@@ -426,73 +441,7 @@ const Dashboard = () => {
             </div>
           </div>
 
-          {/* Database Check Info */}
-          <div className="bg-white/10 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/20 p-6">
-            <h3 className="text-xl font-bold text-white mb-4 flex items-center">
-              <svg
-                className="w-6 h-6 mr-3 text-green-400"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"
-                />
-              </svg>
-              Thông tin Database & Phân quyền
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-4">
-                <h4 className="text-green-300 font-semibold mb-2">
-                  ✅ Database Status
-                </h4>
-                <p className="text-green-300 text-sm">
-                  Thông tin admin đã được lưu vào MongoDB thành công!
-                </p>
-                <div className="mt-3 text-xs text-gray-400">
-                  <p>
-                    <strong>Collection:</strong> users
-                  </p>
-                  <p>
-                    <strong>Document ID:</strong> {user?.id}
-                  </p>
-                  <p>
-                    <strong>Role:</strong> {user?.role}
-                  </p>
-                  <p>
-                    <strong>Created At:</strong>{" "}
-                    {new Date().toLocaleString("vi-VN")}
-                  </p>
-                </div>
-              </div>
-
-              <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-4">
-                <h4 className="text-blue-300 font-semibold mb-2">
-                  🔐 Phân quyền Frontend
-                </h4>
-                <p className="text-blue-300 text-sm">
-                  Frontend đã kiểm tra và phân quyền thành công!
-                </p>
-                <div className="mt-3 text-xs text-gray-400">
-                  <p>
-                    <strong>Current Role:</strong> {user?.role}
-                  </p>
-                  <p>
-                    <strong>Access Level:</strong> Admin
-                  </p>
-                  <p>
-                    <strong>Protected Routes:</strong> ✅ Verified
-                  </p>
-                  <p>
-                    <strong>Token Status:</strong> ✅ Valid
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
+          {/* Removed database info and role panels as requested */}
         </div>
       </div>
     </div>

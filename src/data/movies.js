@@ -34,8 +34,7 @@ export const moviesData = [
     language: "Tiếng Anh - Phụ đề Việt",
     rating: "C13",
     genre: ["Hành động", "Siêu anh hùng", "Phiêu lưu"],
-    poster:
-      "https://images.unsplash.com/photo-1635805737707-575885ab0820?w=300&h=450&fit=crop",
+    poster: "/public/images/55462afc-41ad-4322-ad46-1caca29fcc36.jpg",
     trailer: "https://youtube.com/watch?v=JfVOs4VSpmA",
     director: "Jon Watts",
     cast: ["Tom Holland", "Zendaya", "Benedict Cumberbatch", "Jacob Batalon"],
