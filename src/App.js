@@ -14,6 +14,12 @@ import EditProfile from "./pages/Auth/EditProfile";
 import Home from "./pages/Home/Home";
 import MovieDetail from "./pages/Movies/MovieDetail";
 import Dashboard from "./pages/Admin/Dashboard";
+import CinemaSystemsList from "./pages/Admin/CinemaSystems/List";
+import CinemaSystemForm from "./pages/Admin/CinemaSystems/Form";
+import CinemasList from "./pages/Admin/Cinemas/List";
+import CinemaForm from "./pages/Admin/Cinemas/Form";
+import RoomsList from "./pages/Admin/Rooms/List";
+import RoomForm from "./pages/Admin/Rooms/Form";
 import AdminUsersList from "./pages/Admin/Users/List";
 import AdminUserDetail from "./pages/Admin/Users/Detail";
 import AdminMoviesList from "./pages/Admin/Movies/List";
@@ -23,7 +29,6 @@ import { AdminMoviesProvider } from "./context/AdminMoviesContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 import Footer from "./components/Footer";
 import "./App.css";
-import Booking from "./pages/Movies/Booking";
 
 function App() {
   return (
@@ -58,6 +63,78 @@ function App() {
                 element={
                   <ProtectedRoute requireAdmin={true}>
                     <AdminUserDetail />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/cinema-systems"
+                element={
+                  <ProtectedRoute requireAdmin={true}>
+                    <CinemaSystemsList />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/cinema-systems/add"
+                element={
+                  <ProtectedRoute requireAdmin={true}>
+                    <CinemaSystemForm />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/cinema-systems/:id/edit"
+                element={
+                  <ProtectedRoute requireAdmin={true}>
+                    <CinemaSystemForm />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/cinemas"
+                element={
+                  <ProtectedRoute requireAdmin={true}>
+                    <CinemasList />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/cinemas/add"
+                element={
+                  <ProtectedRoute requireAdmin={true}>
+                    <CinemaForm />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/cinemas/:id/edit"
+                element={
+                  <ProtectedRoute requireAdmin={true}>
+                    <CinemaForm />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/rooms"
+                element={
+                  <ProtectedRoute requireAdmin={true}>
+                    <RoomsList />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/rooms/add"
+                element={
+                  <ProtectedRoute requireAdmin={true}>
+                    <RoomForm />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/rooms/:id/edit"
+                element={
+                  <ProtectedRoute requireAdmin={true}>
+                    <RoomForm />
                   </ProtectedRoute>
                 }
               />
@@ -117,7 +194,6 @@ function App() {
                   </ProtectedRoute>
                 }
               />
-              <Route path="/booking" element={<Booking />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </main>

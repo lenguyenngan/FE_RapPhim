@@ -1,17 +1,19 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import DatePicker from "react-datepicker";
+import "react-datepicker/dist/react-datepicker.css";
 import API from "../../api";
-import { getShowtimesByMovie as getMovieShowtimes } from "../../data/showtimes";
 import {
   getCinemaSystems,
   getClustersBySystem,
   getHallsByCluster,
 } from "../../data/cinemas";
-// import { getClustersBySystem } from "../../data/cinemas";
 
 const MovieDetail = () => {
   const { movieId } = useParams();
   const navigate = useNavigate();
+
+  // ===== State =====
   const [movie, setMovie] = useState(null);
   const [showtimes, setShowtimes] = useState([]);
   const [selectedDate, setSelectedDate] = useState(
@@ -20,13 +22,12 @@ const MovieDetail = () => {
   const [selectedSystem, setSelectedSystem] = useState("");
   const [selectedCluster, setSelectedCluster] = useState("");
   const [selectedHall, setSelectedHall] = useState("");
+  const [seatType, setSeatType] = useState("regular");
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState(null);
 
-  const isYouTubeUrl = (url) => {
-    if (!url) return false;
-    return /youtube\.com|youtu\.be/.test(url);
-  };
+  // ===== Helpers =====
+  const isYouTubeUrl = (url) => url && /youtube\.com|youtu\.be/.test(url);
 
   const toYouTubeEmbed = (url) => {
     if (!url) return "";
@@ -39,48 +40,127 @@ const MovieDetail = () => {
       if (u.hostname.includes("youtube.com")) {
         const id = u.searchParams.get("v");
         if (id) return `https://www.youtube.com/embed/${id}`;
-        // fallback for already-embed links
         if (u.pathname.startsWith("/embed/")) return url;
       }
     } catch (_) {}
     return url;
   };
 
+  const formatPrice = (price) =>
+    new Intl.NumberFormat("vi-VN", {
+      style: "currency",
+      currency: "VND",
+    }).format(price);
+
+  // ===== Load movie + showtimes + auth =====
   useEffect(() => {
-    // Check authentication
     const token = localStorage.getItem("token");
     const userData = localStorage.getItem("user");
-
     if (token && userData) {
       try {
-        const parsedUser = JSON.parse(userData);
-        setUser(parsedUser);
-      } catch (error) {
-        console.error("Error parsing user data:", error);
+        setUser(JSON.parse(userData));
+      } catch (e) {
+        console.error("Error parsing user data:", e);
       }
     }
 
     (async () => {
       try {
+        // Lấy thông tin phim
         const res = await API.get(`/movies/${movieId}`);
         setMovie(res.data.movie);
-        const movieShowtimes = getMovieShowtimes(movieId);
-        setShowtimes(movieShowtimes);
+
+        // Gọi API showtimes với toàn bộ filter
+        const apiRes = await API.get(`/showtimes`, {
+          params: {
+            movieId,
+            date: selectedDate || undefined,
+            systemId: selectedSystem || undefined,
+            clusterId: selectedCluster || undefined,
+            hallId: selectedHall || undefined,
+            seatType: seatType || undefined,
+          },
+        }).catch(() => ({ data: { showtimes: [] } }));
+
+        const dynamicList = apiRes?.data?.showtimes || [];
+
+        // Chuẩn hóa dữ liệu trả về
+        const normalize = (s) => {
+          const d = new Date(s.date);
+          return {
+            ...s,
+            date: isNaN(d.getTime()) ? "" : d.toISOString().split("T")[0],
+            clusterId: String(s.clusterId || ""),
+            hallId: String(s.hallId || ""),
+            startTime: String(s.startTime || ""),
+            endTime: String(s.endTime || ""),
+          };
+        };
+
+        setShowtimes(dynamicList.map(normalize));
       } catch (e) {
         console.error("Load movie failed", e);
       } finally {
         setLoading(false);
       }
     })();
-  }, [movieId]);
+  }, [
+    movieId,
+    selectedDate,
+    selectedSystem,
+    selectedCluster,
+    selectedHall,
+    seatType,
+  ]);
 
-  const formatPrice = (price) => {
-    return new Intl.NumberFormat("vi-VN", {
-      style: "currency",
-      currency: "VND",
-    }).format(price);
-  };
+  // ===== Sync selectedDate with available showtimes =====
+  useEffect(() => {
+    const dates = Array.from(new Set(showtimes.map((s) => s.date))).sort();
+    if (dates.length && !dates.includes(selectedDate)) {
+      setSelectedDate(dates[0]);
+    }
+  }, [showtimes, selectedDate]);
 
+  // ===== Cinema hierarchy =====
+  const systems = getCinemaSystems();
+  const clusters = selectedSystem
+    ? getClustersBySystem(selectedSystem)
+    : systems.flatMap((sys) => sys.clusters || []);
+  const halls = selectedCluster
+    ? getHallsByCluster(selectedCluster)
+    : clusters.flatMap((cl) => cl.halls || []);
+
+  const clusterMeta = (() => {
+    const map = new Map();
+    clusters.forEach((cl) => {
+      const sys = systems.find((s) => s.systemId === cl.systemId);
+      map.set(cl.clusterId, {
+        systemId: cl.systemId,
+        systemName: sys?.name || "Hệ thống",
+        clusterName: cl.name,
+      });
+    });
+    return map;
+  })();
+
+  // ===== Default selections from first showtime =====
+  useEffect(() => {
+    if (!showtimes.length) return;
+    const first = showtimes[0];
+
+    if (!selectedCluster && first.clusterId) {
+      setSelectedCluster(first.clusterId);
+    }
+    if (!selectedHall && first.hallId) {
+      setSelectedHall(first.hallId);
+    }
+    const meta = clusterMeta.get(first.clusterId);
+    if (!selectedSystem && meta?.systemId) {
+      setSelectedSystem(meta.systemId);
+    }
+  }, [showtimes, clusterMeta, selectedCluster, selectedHall, selectedSystem]);
+
+  // ===== Handlers =====
   const handleBookTicket = (showtime) => {
     if (!user) {
       navigate("/login");
@@ -93,21 +173,41 @@ const MovieDetail = () => {
       hallId: showtime.hallId,
       startTime: showtime.startTime,
       endTime: showtime.endTime,
-      price: String(showtime.price),
+      seatType,
+      price: String(
+        showtime?.priceBySeatType?.[seatType] ?? showtime.price ?? 0
+      ),
     });
     navigate(`/booking?${params.toString()}`);
   };
 
-  const handleWatchTrailer = () => {
-    if (movie?.trailer) {
-      window.open(movie.trailer, "_blank");
-    }
-  };
+  const handleWatchTrailer = () =>
+    movie?.trailer && window.open(movie.trailer, "_blank");
 
+  // ===== Filter & group showtimes =====
+  const filteredShowtimes = showtimes.filter((s) => {
+    if (s.date !== selectedDate) return false;
+    if (selectedCluster && s.clusterId !== selectedCluster) return false;
+    if (selectedHall && s.hallId !== selectedHall) return false;
+    return true;
+  });
+
+  const hasShowtimes = filteredShowtimes.length > 0;
+
+  const groupedByCluster = (() => {
+    const groups = new Map();
+    filteredShowtimes.forEach((s) => {
+      if (!groups.has(s.clusterId)) groups.set(s.clusterId, []);
+      groups.get(s.clusterId).push(s);
+    });
+    return groups;
+  })();
+
+  // ===== UI Loading & Movie Not Found =====
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex items-center justify-center">
-        <div className="text-white text-xl">Đang tải...</div>
+        <div className="text-white text-xl animate-pulse">Đang tải...</div>
       </div>
     );
   }
@@ -117,6 +217,9 @@ const MovieDetail = () => {
       <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex items-center justify-center">
         <div className="text-center text-white">
           <h1 className="text-4xl font-bold mb-4">Không tìm thấy phim</h1>
+          <p className="mb-6">
+            Xin lỗi, chúng tôi không tìm thấy phim bạn yêu cầu.
+          </p>
           <button
             onClick={() => navigate("/")}
             className="px-6 py-3 bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl font-semibold hover:from-purple-600 hover:to-pink-600 transition-all duration-300"
@@ -127,47 +230,6 @@ const MovieDetail = () => {
       </div>
     );
   }
-
-  const filteredShowtimes = showtimes.filter((showtime) => {
-    if (showtime.date !== selectedDate) return false;
-    if (selectedCluster && showtime.clusterId !== selectedCluster) return false;
-    if (selectedHall && showtime.hallId !== selectedHall) return false;
-    return true;
-  });
-
-  const availableDates = [...new Set(showtimes.map((s) => s.date))].sort();
-
-  // Cinema hierarchy options
-  const systems = getCinemaSystems();
-  const clusters = selectedSystem ? getClustersBySystem(selectedSystem) : [];
-  const halls = selectedCluster ? getHallsByCluster(selectedCluster) : [];
-
-  // Map clusterId to labels (system + cluster names) for grouped rendering
-  const clusterMeta = (() => {
-    const map = new Map();
-    systems.forEach((sys) => {
-      (sys.clusters || []).forEach((cl) => {
-        map.set(cl.clusterId, {
-          systemId: sys.systemId,
-          systemName: sys.name,
-          clusterName: cl.name,
-        });
-      });
-    });
-    return map;
-  })();
-
-  // Group filtered showtimes by cluster, optionally by hall
-  const groupedByCluster = (() => {
-    const groups = new Map();
-    filteredShowtimes.forEach((s) => {
-      const meta = clusterMeta.get(s.clusterId);
-      if (selectedSystem && meta && meta.systemId !== selectedSystem) return;
-      if (!groups.has(s.clusterId)) groups.set(s.clusterId, []);
-      groups.get(s.clusterId).push(s);
-    });
-    return groups;
-  })();
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
@@ -636,28 +698,26 @@ const MovieDetail = () => {
               </h2>
 
               {/* Filters */}
-              <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 mb-8">
+              <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 mb-8">
+                {/* Chọn ngày */}
                 <div>
                   <label className="block text-white font-medium mb-2">
                     Chọn ngày
                   </label>
-                  <select
-                    value={selectedDate}
-                    onChange={(e) => setSelectedDate(e.target.value)}
+                  <DatePicker
+                    selected={selectedDate ? new Date(selectedDate) : null}
+                    onChange={(date) =>
+                      setSelectedDate(date.toISOString().split("T")[0])
+                    }
+                    dateFormat="EEEE, dd/MM/yyyy"
+                    minDate={new Date()}
                     className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  >
-                    {availableDates.map((date) => (
-                      <option key={date} value={date} className="bg-slate-800">
-                        {new Date(date).toLocaleDateString("vi-VN", {
-                          weekday: "long",
-                          year: "numeric",
-                          month: "long",
-                          day: "numeric",
-                        })}
-                      </option>
-                    ))}
-                  </select>
+                    calendarClassName="bg-slate-800 text-white rounded-xl p-2"
+                    placeholderText="Chọn ngày..."
+                  />
                 </div>
+
+                {/* Hệ thống rạp */}
                 <div>
                   <label className="block text-white font-medium mb-2">
                     Hệ thống rạp
@@ -666,25 +726,21 @@ const MovieDetail = () => {
                     value={selectedSystem}
                     onChange={(e) => {
                       setSelectedSystem(e.target.value);
-                      setSelectedCluster("");
-                      setSelectedHall("");
+                      setSelectedCluster(""); // reset cụm
+                      setSelectedHall(""); // reset phòng
                     }}
                     className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
                   >
-                    <option value="" className="bg-slate-800">
-                      Tất cả hệ thống
-                    </option>
+                    <option value="">Tất cả hệ thống</option>
                     {systems.map((s) => (
-                      <option
-                        key={s.systemId}
-                        value={s.systemId}
-                        className="bg-slate-800"
-                      >
+                      <option key={s.systemId} value={s.systemId}>
                         {s.name}
                       </option>
                     ))}
                   </select>
                 </div>
+
+                {/* Cụm rạp */}
                 <div>
                   <label className="block text-white font-medium mb-2">
                     Cụm rạp
@@ -693,24 +749,20 @@ const MovieDetail = () => {
                     value={selectedCluster}
                     onChange={(e) => {
                       setSelectedCluster(e.target.value);
-                      setSelectedHall("");
+                      setSelectedHall(""); // reset phòng
                     }}
                     className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
                   >
-                    <option value="" className="bg-slate-800">
-                      Tất cả cụm
-                    </option>
+                    <option value="">Tất cả cụm</option>
                     {clusters.map((c) => (
-                      <option
-                        key={c.clusterId}
-                        value={c.clusterId}
-                        className="bg-slate-800"
-                      >
+                      <option key={c.clusterId} value={c.clusterId}>
                         {c.name}
                       </option>
                     ))}
                   </select>
                 </div>
+
+                {/* Phòng chiếu */}
                 <div>
                   <label className="block text-white font-medium mb-2">
                     Phòng chiếu
@@ -720,24 +772,33 @@ const MovieDetail = () => {
                     onChange={(e) => setSelectedHall(e.target.value)}
                     className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
                   >
-                    <option value="" className="bg-slate-800">
-                      Tất cả phòng
-                    </option>
+                    <option value="">Tất cả phòng</option>
                     {halls.map((h) => (
-                      <option
-                        key={h.hallId}
-                        value={h.hallId}
-                        className="bg-slate-800"
-                      >
+                      <option key={h.hallId} value={h.hallId}>
                         {h.name} • {h.screenType}
                       </option>
                     ))}
                   </select>
                 </div>
+
+                {/* Loại ghế */}
+                <div>
+                  <label className="block text-white font-medium mb-2">
+                    Loại ghế
+                  </label>
+                  <select
+                    value={seatType}
+                    onChange={(e) => setSeatType(e.target.value)}
+                    className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  >
+                    <option value="regular">Thường</option>
+                    <option value="vip">VIP</option>
+                  </select>
+                </div>
               </div>
 
               {/* Showtimes grouped by hệ thống/cụm */}
-              {filteredShowtimes.length > 0 ? (
+              {hasShowtimes ? (
                 <div className="space-y-6">
                   {[...groupedByCluster.entries()].map(([clusterId, list]) => {
                     const meta = clusterMeta.get(clusterId);
@@ -746,6 +807,7 @@ const MovieDetail = () => {
                         key={clusterId}
                         className="bg-white/5 border border-white/10 rounded-2xl p-4"
                       >
+                        {/* Header cụm rạp */}
                         <div className="flex items-center justify-between mb-3">
                           <div>
                             <h3 className="text-white font-semibold text-lg">
@@ -760,12 +822,15 @@ const MovieDetail = () => {
                             </p>
                           </div>
                         </div>
+
+                        {/* Suất chiếu */}
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                           {list.map((showtime) => (
                             <div
                               key={showtime.showtimeId}
                               className="bg-white/5 border border-white/10 rounded-xl p-4 hover:bg-white/10 transition-all duration-300"
                             >
+                              {/* Thông tin phòng + giá */}
                               <div className="flex items-center justify-between mb-3">
                                 <div>
                                   <p className="text-gray-300 text-sm">
@@ -774,7 +839,10 @@ const MovieDetail = () => {
                                 </div>
                                 <div className="text-right">
                                   <p className="text-white font-bold text-lg">
-                                    {formatPrice(showtime.price)}
+                                    {formatPrice(
+                                      showtime?.priceBySeatType?.[seatType] ??
+                                        showtime.price
+                                    )}
                                   </p>
                                   <p className="text-gray-300 text-sm">
                                     {showtime.availableSeats}/
@@ -782,6 +850,8 @@ const MovieDetail = () => {
                                   </p>
                                 </div>
                               </div>
+
+                              {/* Giờ chiếu + đặt vé */}
                               <div className="flex items-center justify-between">
                                 <div className="text-center">
                                   <p className="text-white font-bold text-xl">

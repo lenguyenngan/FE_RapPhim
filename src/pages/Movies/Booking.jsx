@@ -16,6 +16,7 @@ const Booking = () => {
   const hallId = query.get("hallId") || "";
   const startTime = query.get("startTime") || "";
   const endTime = query.get("endTime") || "";
+  const seatType = (query.get("seatType") || "regular").toUpperCase();
   const price = Number(query.get("price") || 0);
 
   const [seats, setSeats] = useState([]);
@@ -23,14 +24,11 @@ const Booking = () => {
   const [selectedCombos, setSelectedCombos] = useState({});
   const [loading, setLoading] = useState(false);
 
-  // fetch combos
   useEffect(() => {
     const fetchCombos = async () => {
       try {
         const res = await API.get("/combos");
         setCombos(res.data.combos || []);
-
-        // 👉 Khởi tạo số lượng = 0 cho tất cả combo
         const initial = {};
         (res.data.combos || []).forEach((c) => {
           initial[c.id] = 0;
@@ -55,7 +53,6 @@ const Booking = () => {
     );
   };
 
-  // ✅ chỉ cho phép 1 combo có số lượng > 0, reset combo khác về 0
   const updateCombo = (comboId, qty) => {
     if (qty > 0) {
       const reset = {};
@@ -80,6 +77,7 @@ const Booking = () => {
         hallId,
         startTime,
         endTime,
+        seatType,
         seats,
         pricePerSeat: price,
         combos: Object.entries(selectedCombos)
@@ -118,8 +116,33 @@ const Booking = () => {
           ← Quay lại
         </button>
 
+        {/* Showtime summary */}
+        <div className="mb-6 bg-white/10 border border-white/20 rounded-2xl p-4 text-white">
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="px-3 py-1 rounded-lg bg-purple-500/20 border border-purple-500/40 text-purple-200 text-sm">
+              {date
+                ? new Date(date).toLocaleDateString("vi-VN")
+                : "Ngày chưa chọn"}
+            </span>
+            <span className="px-3 py-1 rounded-lg bg-blue-500/20 border border-blue-500/40 text-blue-200 text-sm">
+              Rạp: {clusterId || "-"}
+            </span>
+            <span className="px-3 py-1 rounded-lg bg-cyan-500/20 border border-cyan-500/40 text-cyan-200 text-sm">
+              Phòng: {hallId || "-"}
+            </span>
+            <span className="px-3 py-1 rounded-lg bg-emerald-500/20 border border-emerald-500/40 text-emerald-200 text-sm">
+              Giờ: {startTime || "--:--"} - {endTime || "--:--"}
+            </span>
+            <span className="px-3 py-1 rounded-lg bg-amber-500/20 border border-amber-500/40 text-amber-200 text-sm">
+              Ghế: {seatType}
+            </span>
+            <span className="px-3 py-1 rounded-lg bg-pink-500/20 border border-pink-500/40 text-pink-200 text-sm">
+              Giá: {price.toLocaleString("vi-VN")} ₫
+            </span>
+          </div>
+        </div>
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Seat selection */}
           <div className="lg:col-span-2 bg-white/10 border border-white/20 rounded-2xl p-6 shadow-lg">
             <h1 className="text-2xl font-bold text-white mb-6">Chọn ghế</h1>
             <div className="grid grid-cols-10 gap-2 justify-items-center">
@@ -142,7 +165,6 @@ const Booking = () => {
             </p>
           </div>
 
-          {/* Info & confirmation */}
           <div className="bg-white/10 border border-white/20 rounded-2xl p-6 shadow-lg text-white">
             <h2 className="text-xl font-bold mb-4">Thông tin suất chiếu</h2>
             <div className="space-y-2 text-gray-200">
@@ -151,7 +173,7 @@ const Booking = () => {
               </div>
               <div>
                 <span className="text-gray-400">📅 Ngày:</span>{" "}
-                {new Date(date).toLocaleDateString("vi-VN")}
+                {date ? new Date(date).toLocaleDateString("vi-VN") : "-"}
               </div>
               <div>
                 <span className="text-gray-400">Rạp:</span> {clusterId} •{" "}
@@ -160,6 +182,9 @@ const Booking = () => {
               <div>
                 <span className="text-gray-400">Giờ:</span> {startTime} -{" "}
                 {endTime}
+              </div>
+              <div>
+                <span className="text-gray-400">Loại ghế:</span> {seatType}
               </div>
               <div>
                 <span className="text-gray-400">Giá vé:</span>{" "}
@@ -171,7 +196,6 @@ const Booking = () => {
               </div>
             </div>
 
-            {/* Combos */}
             <h3 className="text-lg font-semibold mt-6 mb-3">Chọn combo</h3>
             <div className="space-y-3">
               {combos.map((combo) => (
@@ -198,7 +222,6 @@ const Booking = () => {
               ))}
             </div>
 
-            {/* Total */}
             <div className="pt-4 mt-4 border-t border-white/20 font-bold text-white text-lg">
               Tổng:{" "}
               <span className="text-pink-400">
