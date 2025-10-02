@@ -27,6 +27,12 @@ const MovieDetail = () => {
   const [user, setUser] = useState(null);
 
   // ===== Helpers =====
+  const formatPrice = (price) =>
+    new Intl.NumberFormat("vi-VN", {
+      style: "currency",
+      currency: "VND",
+    }).format(price);
+
   const isYouTubeUrl = (url) => url && /youtube\.com|youtu\.be/.test(url);
 
   const toYouTubeEmbed = (url) => {
@@ -46,11 +52,14 @@ const MovieDetail = () => {
     return url;
   };
 
-  const formatPrice = (price) =>
-    new Intl.NumberFormat("vi-VN", {
-      style: "currency",
-      currency: "VND",
-    }).format(price);
+  const handleWatchTrailer = () => {
+    if (movie?.trailer) {
+      const embedUrl = isYouTubeUrl(movie.trailer)
+        ? toYouTubeEmbed(movie.trailer)
+        : movie.trailer;
+      window.open(embedUrl, "_blank");
+    }
+  };
 
   // ===== Load movie + showtimes + auth =====
   useEffect(() => {
@@ -64,62 +73,55 @@ const MovieDetail = () => {
       }
     }
 
-    (async () => {
+    const fetchData = async () => {
+      setLoading(true);
       try {
-        // Lấy thông tin phim
+        // ===== Lấy thông tin phim =====
         const res = await API.get(`/movies/${movieId}`);
         setMovie(res.data.movie);
 
-        // Gọi API showtimes với toàn bộ filter
-        const apiRes = await API.get(`/showtimes`, {
-          params: {
-            movieId,
-            date: selectedDate || undefined,
-            systemId: selectedSystem || undefined,
-            clusterId: selectedCluster || undefined,
-            hallId: selectedHall || undefined,
-            seatType: seatType || undefined,
-          },
-        }).catch(() => ({ data: { showtimes: [] } }));
+        // ===== Lấy showtimes từ backend =====
+        const apiRes = await API.get(`/showtimes`, { params: { movieId } });
+        const rawShowtimes = apiRes?.data?.showtimes || [];
+        console.log("rawShowtimes", rawShowtimes);
 
-        const dynamicList = apiRes?.data?.showtimes || [];
-
-        // Chuẩn hóa dữ liệu trả về
-        const normalize = (s) => {
-          const d = new Date(s.date);
-          return {
+        // ===== Chuẩn hóa dữ liệu showtimes =====
+        const normalizeShowtimes = (showtimes) =>
+          showtimes.map((s, idx) => ({
             ...s,
-            date: isNaN(d.getTime()) ? "" : d.toISOString().split("T")[0],
+            showtimeId: s.showtimeId ?? `showtime-${idx}-${Math.random()}`, // đảm bảo key duy nhất
+            systemId: String(s.systemId || ""),
             clusterId: String(s.clusterId || ""),
             hallId: String(s.hallId || ""),
+            date: new Date(s.date).toISOString().split("T")[0],
             startTime: String(s.startTime || ""),
             endTime: String(s.endTime || ""),
-          };
-        };
+            priceBySeatType: {
+              regular: Number(s.priceRegular ?? 0),
+              vip: Number(s.priceVip ?? 0),
+            },
+          }));
 
-        setShowtimes(dynamicList.map(normalize));
+        const processedShowtimes = normalizeShowtimes(rawShowtimes);
+        setShowtimes(processedShowtimes);
+
+        // ===== Set default selections nếu chưa chọn =====
+        if (processedShowtimes.length) {
+          const first = processedShowtimes[0];
+          setSelectedSystem((prev) => prev || first.systemId);
+          setSelectedCluster((prev) => prev || first.clusterId);
+          setSelectedHall((prev) => prev || first.hallId);
+          setSelectedDate((prev) => prev || first.date);
+        }
       } catch (e) {
-        console.error("Load movie failed", e);
+        console.error("Load movie/showtimes failed", e);
       } finally {
         setLoading(false);
       }
-    })();
-  }, [
-    movieId,
-    selectedDate,
-    selectedSystem,
-    selectedCluster,
-    selectedHall,
-    seatType,
-  ]);
+    };
 
-  // ===== Sync selectedDate with available showtimes =====
-  useEffect(() => {
-    const dates = Array.from(new Set(showtimes.map((s) => s.date))).sort();
-    if (dates.length && !dates.includes(selectedDate)) {
-      setSelectedDate(dates[0]);
-    }
-  }, [showtimes, selectedDate]);
+    fetchData();
+  }, [movieId]);
 
   // ===== Cinema hierarchy =====
   const systems = getCinemaSystems();
@@ -147,25 +149,16 @@ const MovieDetail = () => {
   useEffect(() => {
     if (!showtimes.length) return;
     const first = showtimes[0];
-
-    if (!selectedCluster && first.clusterId) {
-      setSelectedCluster(first.clusterId);
-    }
-    if (!selectedHall && first.hallId) {
-      setSelectedHall(first.hallId);
-    }
-    const meta = clusterMeta.get(first.clusterId);
-    if (!selectedSystem && meta?.systemId) {
-      setSelectedSystem(meta.systemId);
-    }
-  }, [showtimes, clusterMeta, selectedCluster, selectedHall, selectedSystem]);
+    setSelectedSystem((prev) => prev || first.systemId);
+    setSelectedCluster((prev) => prev || first.clusterId);
+    setSelectedHall((prev) => prev || first.hallId);
+    setSelectedDate((prev) => prev || first.date);
+  }, [showtimes]);
 
   // ===== Handlers =====
   const handleBookTicket = (showtime) => {
-    if (!user) {
-      navigate("/login");
-      return;
-    }
+    if (!user) return navigate("/login");
+
     const params = new URLSearchParams({
       movieId: movie.movieId,
       date: showtime.date,
@@ -174,19 +167,16 @@ const MovieDetail = () => {
       startTime: showtime.startTime,
       endTime: showtime.endTime,
       seatType,
-      price: String(
-        showtime?.priceBySeatType?.[seatType] ?? showtime.price ?? 0
-      ),
+      price: String(showtime?.priceBySeatType?.[seatType] ?? 0),
     });
+
     navigate(`/booking?${params.toString()}`);
   };
-
-  const handleWatchTrailer = () =>
-    movie?.trailer && window.open(movie.trailer, "_blank");
 
   // ===== Filter & group showtimes =====
   const filteredShowtimes = showtimes.filter((s) => {
     if (s.date !== selectedDate) return false;
+    if (selectedSystem && s.systemId !== selectedSystem) return false;
     if (selectedCluster && s.clusterId !== selectedCluster) return false;
     if (selectedHall && s.hallId !== selectedHall) return false;
     return true;

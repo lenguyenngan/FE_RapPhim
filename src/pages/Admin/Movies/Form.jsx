@@ -89,11 +89,15 @@ const Form = () => {
     }
   }, [isEdit, existing]);
 
+  // ===== State notify =====
+  const [notify, setNotify] = useState(null);
+
+  // ===== Validate form =====
   const validate = () => {
     const e = {};
-    if (!values.title.trim()) e.title = "Nhập tiêu đề";
-    if (!values.description.trim()) e.description = "Nhập mô tả";
-    if (!values.genre.trim()) e.genre = "Nhập thể loại";
+    if (!values.title?.trim()) e.title = "Nhập tiêu đề";
+    if (!values.description?.trim()) e.description = "Nhập mô tả";
+    if (!values.genre?.trim()) e.genre = "Nhập thể loại";
     if (!String(values.duration).trim() || Number(values.duration) <= 0)
       e.duration = "Thời lượng > 0";
     if (!values.releaseDate) e.releaseDate = "Chọn ngày chiếu";
@@ -109,7 +113,8 @@ const Form = () => {
       e.poster = "Chọn ảnh hoặc nhập URL";
     if (!values.trailer && !values.trailerFile)
       e.trailer = "Tải trailer hoặc nhập URL";
-    // Optional basic validation for showtimes
+
+    // Validation showtimes
     (values.showtimes || []).forEach((s, i) => {
       if (!s.date || !s.clusterId || !s.hallId || !s.startTime || !s.endTime) {
         e[`showtimes_${i}`] = "Thiếu thông tin lịch chiếu";
@@ -120,13 +125,16 @@ const Form = () => {
           "Giá vé phải > 0";
       }
     });
+
     setErrors(e);
     return Object.keys(e).length === 0;
   };
 
+  // ===== Submit form =====
   const handleSubmit = async (evt) => {
     evt.preventDefault();
     if (!validate()) return;
+
     const base = {
       title: values.title.trim(),
       description: values.description.trim(),
@@ -149,11 +157,13 @@ const Form = () => {
       isComingSoon: Boolean(values.isComingSoon),
       status: values.status,
     };
+
     const fd = new FormData();
     Object.entries(base).forEach(([k, v]) =>
       fd.append(k, Array.isArray(v) ? v.join(",") : v)
     );
-    // attach showtimes JSON if provided
+
+    // Attach showtimes JSON with priceBySeatType
     if ((values.showtimes || []).length) {
       fd.append(
         "showtimes",
@@ -162,10 +172,15 @@ const Form = () => {
             ...s,
             priceRegular: Number(s.priceRegular || 0),
             priceVip: Number(s.priceVip || 0),
+            priceBySeatType: {
+              regular: Number(s.priceRegular || 0),
+              vip: Number(s.priceVip || 0),
+            },
           }))
         )
       );
     }
+
     if (values.posterFile) fd.append("poster", values.posterFile);
     else if (values.poster) fd.append("poster", values.poster.trim());
     if (values.trailerFile) fd.append("trailer", values.trailerFile);
@@ -174,39 +189,21 @@ const Form = () => {
     try {
       if (isEdit) {
         await updateMovie(movieId, fd);
-        // If showtimes provided, sync to backend (best-effort)
         if ((values.showtimes || []).length) {
-          try {
-            const res = await API.post("/showtimes", {
-              movieId,
-              showtimes: values.showtimes,
-            });
-            console.log("Showtimes synced for update:", res.data);
-          } catch (err) {
-            console.warn(
-              "Sync showtimes failed:",
-              err?.response?.data || err?.message
-            );
-          }
+          await API.post("/showtimes", {
+            movieId,
+            showtimes: values.showtimes,
+          });
         }
         setNotify({ type: "success", msg: "Cập nhật phim thành công" });
         navigate(`/admin/movies/${movieId}`);
       } else {
         const created = await addMovie(fd);
-        // If showtimes provided, sync to backend (best-effort)
         if ((values.showtimes || []).length && created?.movieId) {
-          try {
-            const res = await API.post("/showtimes", {
-              movieId: created.movieId,
-              showtimes: values.showtimes,
-            });
-            console.log("Showtimes synced for create:", res.data);
-          } catch (err) {
-            console.warn(
-              "Sync showtimes failed:",
-              err?.response?.data || err?.message
-            );
-          }
+          await API.post("/showtimes", {
+            movieId: created.movieId,
+            showtimes: values.showtimes,
+          });
         }
         setNotify({ type: "success", msg: "Thêm phim thành công" });
         navigate("/admin/movies");
@@ -219,17 +216,12 @@ const Form = () => {
     }
   };
 
-  const onChange = (key) => (e) =>
-    setValues((v) => ({ ...v, [key]: e.target.value }));
-  const onFile = (key) => (e) => {
-    const file = e.target.files?.[0];
-    setValues((v) => ({ ...v, [key]: file }));
-  };
+  // ===== Handlers showtimes =====
   const addShowtime = () =>
     setValues((v) => ({
       ...v,
       showtimes: [
-        ...v.showtimes,
+        ...(v.showtimes || []),
         {
           date: "",
           clusterId: "",
@@ -238,24 +230,46 @@ const Form = () => {
           endTime: "",
           priceRegular: 100000,
           priceVip: 140000,
+          priceBySeatType: {
+            regular: 100000,
+            vip: 140000,
+          },
         },
       ],
     }));
+
   const updateShowtime = (idx, key, val) =>
     setValues((v) => ({
       ...v,
-      showtimes: v.showtimes.map((s, i) =>
-        i === idx ? { ...s, [key]: val } : s
+      showtimes: (v.showtimes || []).map((s, i) =>
+        i === idx
+          ? {
+              ...s,
+              [key]: val,
+              priceBySeatType:
+                key === "priceRegular"
+                  ? { ...s.priceBySeatType, regular: Number(val) }
+                  : key === "priceVip"
+                  ? { ...s.priceBySeatType, vip: Number(val) }
+                  : s.priceBySeatType,
+            }
+          : s
       ),
     }));
+
   const removeShowtime = (idx) =>
     setValues((v) => ({
       ...v,
-      showtimes: v.showtimes.filter((_, i) => i !== idx),
+      showtimes: (v.showtimes || []).filter((_, i) => i !== idx),
     }));
 
-  const [notify, setNotify] = useState(null);
-
+  // ===== Handlers inputs =====
+  const onChange = (key) => (e) =>
+    setValues((v) => ({ ...v, [key]: e.target.value }));
+  const onFile = (key) => (e) => {
+    const file = e.target.files?.[0];
+    setValues((v) => ({ ...v, [key]: file }));
+  };
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 px-4 py-8">
       <div className="max-w-3xl mx-auto bg-white/10 border border-white/20 rounded-2xl p-6">
