@@ -89,25 +89,35 @@ const MovieDetail = () => {
         const normalizeShowtimes = (showtimes) =>
           showtimes.map((s, idx) => ({
             ...s,
-            showtimeId: s.showtimeId ?? `showtime-${idx}-${Math.random()}`, // đảm bảo key duy nhất
+            showtimeId: s.showtimeId ?? `showtime-${idx}-${Math.random()}`,
             systemId: String(s.systemId || ""),
             clusterId: String(s.clusterId || ""),
             hallId: String(s.hallId || ""),
             date: new Date(s.date).toISOString().split("T")[0],
             startTime: String(s.startTime || ""),
             endTime: String(s.endTime || ""),
+            // ✅ Ưu tiên lấy giá từ priceBySeatType (nếu có)
             priceBySeatType: {
-              regular: Number(s.priceRegular ?? 0),
-              vip: Number(s.priceVip ?? 0),
+              regular:
+                Number(s.priceBySeatType?.regular) ??
+                Number(s.priceRegular) ??
+                Number(s.price) ??
+                0,
+              vip:
+                Number(s.priceBySeatType?.vip) ??
+                Number(s.priceVip) ??
+                Math.round((Number(s.price) ?? 0) * 1.4),
             },
           }));
 
-        const processedShowtimes = normalizeShowtimes(rawShowtimes);
-        setShowtimes(processedShowtimes);
+        // ===== Chuẩn hóa và set state =====
+        const dynamicList = apiRes?.data?.showtimes || [];
+        const normalized = normalizeShowtimes(dynamicList);
+        setShowtimes(normalized);
 
         // ===== Set default selections nếu chưa chọn =====
-        if (processedShowtimes.length) {
-          const first = processedShowtimes[0];
+        if (normalized.length) {
+          const first = normalized[0];
           setSelectedSystem((prev) => prev || first.systemId);
           setSelectedCluster((prev) => prev || first.clusterId);
           setSelectedHall((prev) => prev || first.hallId);
@@ -573,22 +583,31 @@ const MovieDetail = () => {
                     </svg>
                     Diễn viên & Đạo diễn
                   </h3>
-                  <div className="space-y-4">
+
+                  <div className="space-y-6 text-center">
+                    {/* Đạo diễn */}
                     <div>
-                      <h4 className="text-lg font-semibold text-white mb-3">
+                      <h4 className="text-lg font-semibold text-white mb-2">
                         Đạo diễn
                       </h4>
                       <p className="text-gray-300 text-lg">{movie.director}</p>
                     </div>
+
+                    {/* Diễn viên chính */}
                     <div>
                       <h4 className="text-lg font-semibold text-white mb-3">
                         Diễn viên chính
                       </h4>
-                      <div className="flex flex-wrap gap-3">
+                      <div className="flex flex-wrap justify-center gap-4">
                         {movie.cast.map((actor, index) => (
                           <span
                             key={index}
-                            className="px-4 py-2 bg-purple-500/20 text-purple-300 text-sm rounded-full border border-purple-400/30 hover:bg-purple-500/30 transition-colors"
+                            className="px-5 py-2 rounded-full text-sm font-semibold text-white 
+                       bg-gradient-to-r from-purple-700/40 to-indigo-700/40 
+                       border border-purple-400/30 
+                       shadow-md hover:shadow-purple-500/30 
+                       hover:bg-purple-600/50 
+                       transition-all duration-300"
                           >
                             {actor}
                           </span>
