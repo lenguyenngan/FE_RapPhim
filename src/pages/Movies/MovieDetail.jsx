@@ -2,12 +2,14 @@ import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
+import toast from "react-hot-toast";
 import API from "../../api";
 import {
   getCinemaSystems,
   getClustersBySystem,
   getHallsByCluster,
 } from "../../data/cinemas";
+// import { lockSeats } from "../../api/booking";
 
 const MovieDetail = () => {
   const { movieId } = useParams();
@@ -39,10 +41,8 @@ const MovieDetail = () => {
     if (!url) return "";
     try {
       const u = new URL(url);
-      if (u.hostname.includes("youtu.be")) {
-        const id = u.pathname.replace("/", "");
-        return `https://www.youtube.com/embed/${id}`;
-      }
+      if (u.hostname.includes("youtu.be"))
+        return `https://www.youtube.com/embed/${u.pathname.slice(1)}`;
       if (u.hostname.includes("youtube.com")) {
         const id = u.searchParams.get("v");
         if (id) return `https://www.youtube.com/embed/${id}`;
@@ -76,52 +76,44 @@ const MovieDetail = () => {
     const fetchData = async () => {
       setLoading(true);
       try {
-        // ===== Lấy thông tin phim =====
+        // Lấy thông tin phim
         const res = await API.get(`/movies/${movieId}`);
         setMovie(res.data.movie);
 
-        // ===== Lấy showtimes từ backend =====
+        // Lấy showtimes
         const apiRes = await API.get(`/showtimes`, { params: { movieId } });
         const rawShowtimes = apiRes?.data?.showtimes || [];
-        console.log("rawShowtimes", rawShowtimes);
 
-        // ===== Chuẩn hóa dữ liệu showtimes =====
-        const normalizeShowtimes = (showtimes) =>
-          showtimes.map((s, idx) => ({
-            ...s,
-            showtimeId: s.showtimeId ?? `showtime-${idx}-${Math.random()}`,
-            systemId: String(s.systemId || ""),
-            clusterId: String(s.clusterId || ""),
-            hallId: String(s.hallId || ""),
-            date: new Date(s.date).toISOString().split("T")[0],
-            startTime: String(s.startTime || ""),
-            endTime: String(s.endTime || ""),
-            // ✅ Ưu tiên lấy giá từ priceBySeatType (nếu có)
-            priceBySeatType: {
-              regular:
-                Number(s.priceBySeatType?.regular) ??
-                Number(s.priceRegular) ??
-                Number(s.price) ??
-                0,
-              vip:
-                Number(s.priceBySeatType?.vip) ??
-                Number(s.priceVip) ??
-                Math.round((Number(s.price) ?? 0) * 1.4),
-            },
-          }));
+        // Chuẩn hóa showtimes
+        const normalized = rawShowtimes.map((s, idx) => ({
+          ...s,
+          showtimeId: s.showtimeId ?? `showtime-${idx}-${Math.random()}`,
+          systemId: String(s.systemId || ""),
+          clusterId: String(s.clusterId || ""),
+          hallId: String(s.hallId || ""),
+          date: new Date(s.date).toISOString().split("T")[0],
+          startTime: String(s.startTime || ""),
+          endTime: String(s.endTime || ""),
+          priceBySeatType: {
+            regular: Number(
+              s.priceBySeatType?.regular ?? s.priceRegular ?? s.price ?? 0
+            ),
+            vip: Number(
+              s.priceBySeatType?.vip ??
+                s.priceVip ??
+                Math.round((s.price ?? 0) * 1.4)
+            ),
+          },
+        }));
 
-        // ===== Chuẩn hóa và set state =====
-        const dynamicList = apiRes?.data?.showtimes || [];
-        const normalized = normalizeShowtimes(dynamicList);
         setShowtimes(normalized);
 
-        // ===== Set default selections nếu chưa chọn =====
         if (normalized.length) {
           const first = normalized[0];
-          setSelectedSystem((prev) => prev || first.systemId);
-          setSelectedCluster((prev) => prev || first.clusterId);
-          setSelectedHall((prev) => prev || first.hallId);
-          setSelectedDate((prev) => prev || first.date);
+          setSelectedSystem(first.systemId);
+          setSelectedCluster(first.clusterId);
+          setSelectedHall(first.hallId);
+          setSelectedDate(first.date);
         }
       } catch (e) {
         console.error("Load movie/showtimes failed", e);
@@ -142,6 +134,7 @@ const MovieDetail = () => {
     ? getHallsByCluster(selectedCluster)
     : clusters.flatMap((cl) => cl.halls || []);
 
+  // ===== Cluster meta =====
   const clusterMeta = (() => {
     const map = new Map();
     clusters.forEach((cl) => {
@@ -155,7 +148,7 @@ const MovieDetail = () => {
     return map;
   })();
 
-  // ===== Default selections from first showtime =====
+  // ===== Default selection =====
   useEffect(() => {
     if (!showtimes.length) return;
     const first = showtimes[0];
@@ -167,23 +160,41 @@ const MovieDetail = () => {
 
   // ===== Handlers =====
   const handleBookTicket = (showtime) => {
-    if (!user) return navigate("/login");
+    if (!user) {
+      toast.error("Vui lòng đăng nhập để đặt vé!");
+      return navigate("/login");
+    }
 
-    const params = new URLSearchParams({
-      movieId: movie.movieId,
-      date: showtime.date,
-      clusterId: showtime.clusterId,
-      hallId: showtime.hallId,
-      startTime: showtime.startTime,
-      endTime: showtime.endTime,
-      seatType,
-      price: String(showtime?.priceBySeatType?.[seatType] ?? 0),
-    });
+    if (!showtime?._id) {
+      toast.error("Thông tin suất chiếu không hợp lệ!");
+      return;
+    }
 
-    navigate(`/booking?${params.toString()}`);
+    try {
+      // Tạo URL params để truyền thông tin showtime
+      const params = new URLSearchParams({
+        movieId: movie?.movieId || movie?._id || "",
+        showtimeId: showtime._id,
+        date: showtime.date || "",
+        startTime: showtime.startTime || "",
+        endTime: showtime.endTime || "",
+        cinemaName: showtime.cinemaName || "",
+        theaterName: showtime.theaterName || "",
+        price: showtime.price || 50000,
+        movieTitle: movie?.title || "",
+        moviePoster: movie?.poster || "",
+      });
+
+      // Navigate sang trang Booking
+      navigate(`/seat-booking?${params.toString()}`);
+      toast.success("Chuyển đến trang chọn ghế!");
+    } catch (err) {
+      console.error("Lỗi handleBookTicket:", err);
+      toast.error("Có lỗi xảy ra, vui lòng thử lại!");
+    }
   };
 
-  // ===== Filter & group showtimes =====
+  // ===== Filter showtimes =====
   const filteredShowtimes = showtimes.filter((s) => {
     if (s.date !== selectedDate) return false;
     if (selectedSystem && s.systemId !== selectedSystem) return false;
@@ -419,29 +430,32 @@ const MovieDetail = () => {
               <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent"></div>
 
               {/* Movie Info Overlay */}
-              <div className="absolute bottom-0 left-0 right-0 p-8 lg:p-12">
+              <div className="absolute bottom-0 left-0 right-0 p-6 lg:p-12 bg-gradient-to-t from-black/90 via-black/50 to-transparent animate-fadeUp">
                 <div className="max-w-4xl">
-                  <div className="flex items-center space-x-4 mb-4">
+                  {/* Tags */}
+                  <div className="flex items-center flex-wrap gap-3 mb-5 animate-fadeUpDelay-100">
                     {movie.isHot && (
-                      <span className="px-4 py-2 bg-red-500 text-white text-sm font-bold rounded-full animate-pulse">
+                      <span className="px-4 py-1.5 bg-red-600/90 text-white text-sm font-semibold rounded-full shadow-md animate-pulse">
                         🔥 HOT
                       </span>
                     )}
                     {movie.isComingSoon && (
-                      <span className="px-4 py-2 bg-blue-500 text-white text-sm font-bold rounded-full">
+                      <span className="px-4 py-1.5 bg-blue-600/90 text-white text-sm font-semibold rounded-full shadow-md">
                         🎬 SẮP CHIẾU
                       </span>
                     )}
-                    <span className="px-4 py-2 bg-black/50 text-white text-sm rounded-full border border-white/30">
+                    <span className="px-4 py-1.5 bg-black/40 text-white text-sm rounded-full border border-white/20 backdrop-blur-sm shadow-inner">
                       {movie.rating}
                     </span>
                   </div>
 
-                  <h1 className="text-5xl lg:text-7xl font-bold text-white mb-6 leading-tight">
+                  {/* Title */}
+                  <h1 className="text-4xl md:text-6xl lg:text-7xl font-extrabold text-white drop-shadow-[0_4px_10px_rgba(0,0,0,0.7)] mb-6 leading-tight animate-fadeUpDelay-200">
                     {movie.title}
                   </h1>
 
-                  <div className="flex flex-wrap items-center gap-6 mb-6">
+                  {/* Info */}
+                  <div className="flex flex-wrap items-center gap-6 mb-8 text-gray-200 animate-fadeUpDelay-300">
                     <div className="flex items-center">
                       <svg
                         className="w-6 h-6 text-yellow-400 mr-2"
@@ -450,11 +464,11 @@ const MovieDetail = () => {
                       >
                         <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
                       </svg>
-                      <span className="text-white font-bold text-xl">
+                      <span className="text-lg font-semibold">
                         {movie.imdbRating}/10
                       </span>
                     </div>
-                    <div className="flex items-center text-gray-300">
+                    <div className="flex items-center">
                       <svg
                         className="w-5 h-5 mr-2"
                         fill="none"
@@ -470,7 +484,7 @@ const MovieDetail = () => {
                       </svg>
                       <span>{movie.duration} phút</span>
                     </div>
-                    <div className="flex items-center text-gray-300">
+                    <div className="flex items-center">
                       <svg
                         className="w-5 h-5 mr-2"
                         fill="none"
@@ -492,21 +506,23 @@ const MovieDetail = () => {
                     </div>
                   </div>
 
-                  <div className="flex flex-wrap gap-3 mb-8">
+                  {/* Genre Tags */}
+                  <div className="flex flex-wrap gap-3 mb-8 animate-fadeUpDelay-400">
                     {movie.genre.map((g, index) => (
                       <span
                         key={index}
-                        className="px-4 py-2 bg-purple-500/30 text-purple-200 text-sm rounded-full border border-purple-400/50"
+                        className="px-4 py-2 bg-purple-600/30 text-purple-200 text-sm rounded-full border border-purple-400/50 shadow-md hover:bg-purple-600/40 hover:scale-105 transition-transform"
                       >
                         {g}
                       </span>
                     ))}
                   </div>
 
-                  <div className="flex flex-wrap gap-4">
+                  {/* Buttons */}
+                  <div className="flex flex-wrap gap-4 animate-fadeUpDelay-500">
                     <button
                       onClick={handleWatchTrailer}
-                      className="px-8 py-4 bg-red-600 hover:bg-red-700 rounded-xl text-white font-bold text-lg transition-all duration-300 hover:scale-105 shadow-lg hover:shadow-red-500/25 flex items-center"
+                      className="px-8 py-4 bg-gradient-to-r from-purple-600 to-fuchsia-600 hover:from-purple-700 hover:to-fuchsia-700 rounded-xl text-white font-bold text-lg transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-purple-500/30 flex items-center"
                     >
                       <svg
                         className="w-6 h-6 mr-2"
@@ -517,9 +533,10 @@ const MovieDetail = () => {
                       </svg>
                       Xem Trailer
                     </button>
-                    <button className="px-8 py-4 bg-white/20 hover:bg-white/30 border border-white/30 rounded-xl text-white font-bold text-lg transition-all duration-300 hover:scale-105 flex items-center">
+
+                    <button className="px-8 py-4 bg-white/10 hover:bg-white/20 border border-white/30 rounded-xl text-white font-semibold text-lg transition-all duration-300 transform hover:scale-105 shadow-md flex items-center">
                       <svg
-                        className="w-6 h-6 mr-2"
+                        className="w-6 h-6 mr-2 text-pink-400"
                         fill="none"
                         stroke="currentColor"
                         viewBox="0 0 24 24"

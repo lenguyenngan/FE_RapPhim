@@ -28,8 +28,8 @@ import AdminMovieDetail from "./pages/Admin/Movies/Detail";
 import { AdminMoviesProvider } from "./context/AdminMoviesContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 import Footer from "./components/Footer";
+import Booking from "./pages/Movies/Booking";
 import "./App.css";
-
 function App() {
   return (
     <AuthProvider>
@@ -39,6 +39,7 @@ function App() {
             <Routes>
               <Route path="/" element={<Home />} />
               <Route path="/movies/:movieId" element={<MovieDetail />} />
+              <Route path="/seat-booking" element={<Booking />} />
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
               <Route path="/reset-password" element={<ResetPassword />} />
