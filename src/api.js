@@ -9,18 +9,6 @@ const API = axios.create({
   withCredentials: true,
 });
 
-// Resolve asset URLs that come from backend (e.g., "/uploads/...")
-export const resolveAssetUrl = (path) => {
-  if (!path) return path;
-  if (/^https?:\/\//i.test(path)) return path;
-  if (path.startsWith("/uploads/")) {
-    const apiBase = API.defaults.baseURL || "";
-    const origin = apiBase.replace(/\/$/, "").replace(/\/api$/, "");
-    return `${origin}${path}`;
-  }
-  return path;
-};
-
 // Request interceptor
 API.interceptors.request.use(
   (config) => {
@@ -57,5 +45,23 @@ API.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+
+// Helper function to resolve asset URLs
+export const resolveAssetUrl = (path) => {
+  if (!path) return "";
+
+  // If it's already a full URL, return as is
+  if (path.startsWith("http://") || path.startsWith("https://")) {
+    return path;
+  }
+
+  // If it's a relative path, make it absolute from the backend
+  if (path.startsWith("/")) {
+    return `http://localhost:5000${path}`;
+  }
+
+  // If it's a relative path without leading slash, add it
+  return `http://localhost:5000/${path}`;
+};
 
 export default API;

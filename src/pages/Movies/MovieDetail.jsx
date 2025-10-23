@@ -4,6 +4,7 @@ import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 import toast from "react-hot-toast";
 import API from "../../api";
+import { useAuth } from "../../context/AuthContext";
 import {
   getCinemaSystems,
   getClustersBySystem,
@@ -14,6 +15,7 @@ import {
 const MovieDetail = () => {
   const { movieId } = useParams();
   const navigate = useNavigate();
+  const { user, isAuthenticated } = useAuth();
 
   // ===== State =====
   const [movie, setMovie] = useState(null);
@@ -26,14 +28,13 @@ const MovieDetail = () => {
   const [selectedHall, setSelectedHall] = useState("");
   const [seatType, setSeatType] = useState("regular");
   const [loading, setLoading] = useState(true);
-  const [user, setUser] = useState(null);
 
   // ===== Helpers =====
-  const formatPrice = (price) =>
-    new Intl.NumberFormat("vi-VN", {
-      style: "currency",
-      currency: "VND",
-    }).format(price);
+  // const formatPrice = (price) =>
+  //   new Intl.NumberFormat("vi-VN", {
+  //     style: "currency",
+  //     currency: "VND",
+  //   }).format(price);
 
   const isYouTubeUrl = (url) => url && /youtube\.com|youtu\.be/.test(url);
 
@@ -61,18 +62,14 @@ const MovieDetail = () => {
     }
   };
 
+  // Debug user state changes
+  useEffect(() => {
+    console.log("MovieDetail - User state changed:", user);
+    console.log("MovieDetail - isAuthenticated:", isAuthenticated());
+  }, [user, isAuthenticated]);
+
   // ===== Load movie + showtimes + auth =====
   useEffect(() => {
-    const token = localStorage.getItem("token");
-    const userData = localStorage.getItem("user");
-    if (token && userData) {
-      try {
-        setUser(JSON.parse(userData));
-      } catch (e) {
-        console.error("Error parsing user data:", e);
-      }
-    }
-
     const fetchData = async () => {
       setLoading(true);
       try {
@@ -160,7 +157,10 @@ const MovieDetail = () => {
 
   // ===== Handlers =====
   const handleBookTicket = (showtime) => {
-    if (!user) {
+    console.log("handleBookTicket - user:", user);
+    console.log("handleBookTicket - isAuthenticated:", isAuthenticated());
+
+    if (!user || !isAuthenticated()) {
       toast.error("Vui lòng đăng nhập để đặt vé!");
       return navigate("/login");
     }
@@ -182,11 +182,11 @@ const MovieDetail = () => {
         theaterName: showtime.theaterName || "",
         price: showtime.price || 50000,
         movieTitle: movie?.title || "",
-        moviePoster: movie?.poster || "",
+        moviePoster: movie?.poster || "/images/default-poster.jpg",
       });
 
       // Navigate sang trang Booking
-      navigate(`/seat-booking?${params.toString()}`);
+      navigate(`/booking?${params.toString()}`);
       toast.success("Chuyển đến trang chọn ghế!");
     } catch (err) {
       console.error("Lỗi handleBookTicket:", err);
@@ -755,7 +755,7 @@ const MovieDetail = () => {
                       setSelectedCluster(""); // reset cụm
                       setSelectedHall(""); // reset phòng
                     }}
-                    className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl text-black focus:outline-none focus:ring-2 focus:ring-purple-500"
                   >
                     <option value="">Tất cả hệ thống</option>
                     {systems.map((s) => (
@@ -777,7 +777,7 @@ const MovieDetail = () => {
                       setSelectedCluster(e.target.value);
                       setSelectedHall(""); // reset phòng
                     }}
-                    className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl text-black focus:outline-none focus:ring-2 focus:ring-purple-500"
                   >
                     <option value="">Tất cả cụm</option>
                     {clusters.map((c) => (
@@ -796,7 +796,7 @@ const MovieDetail = () => {
                   <select
                     value={selectedHall}
                     onChange={(e) => setSelectedHall(e.target.value)}
-                    className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl text-black focus:outline-none focus:ring-2 focus:ring-purple-500"
                   >
                     <option value="">Tất cả phòng</option>
                     {halls.map((h) => (
@@ -815,7 +815,7 @@ const MovieDetail = () => {
                   <select
                     value={seatType}
                     onChange={(e) => setSeatType(e.target.value)}
-                    className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl text-black focus:outline-none focus:ring-2 focus:ring-purple-500"
                   >
                     <option value="regular">Thường</option>
                     <option value="vip">VIP</option>
@@ -856,23 +856,11 @@ const MovieDetail = () => {
                               key={showtime.showtimeId}
                               className="bg-white/5 border border-white/10 rounded-xl p-4 hover:bg-white/10 transition-all duration-300"
                             >
-                              {/* Thông tin phòng + giá */}
+                              {/* Thông tin phòng */}
                               <div className="flex items-center justify-between mb-3">
                                 <div>
                                   <p className="text-gray-300 text-sm">
                                     Phòng {showtime.hallId}
-                                  </p>
-                                </div>
-                                <div className="text-right">
-                                  <p className="text-white font-bold text-lg">
-                                    {formatPrice(
-                                      showtime?.priceBySeatType?.[seatType] ??
-                                        showtime.price
-                                    )}
-                                  </p>
-                                  <p className="text-gray-300 text-sm">
-                                    {showtime.availableSeats}/
-                                    {showtime.totalSeats} ghế
                                   </p>
                                 </div>
                               </div>
@@ -890,13 +878,15 @@ const MovieDetail = () => {
                                 <button
                                   onClick={() => handleBookTicket(showtime)}
                                   className={`px-6 py-2 rounded-xl font-semibold transition-all duration-300 ${
-                                    user
+                                    user && isAuthenticated()
                                       ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:from-purple-600 hover:to-pink-600"
                                       : "bg-gray-500/20 border border-gray-500/50 text-gray-400 cursor-not-allowed"
                                   }`}
-                                  disabled={!user}
+                                  disabled={!user || !isAuthenticated()}
                                 >
-                                  {user ? "Đặt vé" : "Cần đăng nhập"}
+                                  {user && isAuthenticated()
+                                    ? "Đặt vé"
+                                    : "Cần đăng nhập"}
                                 </button>
                               </div>
                             </div>
@@ -934,7 +924,7 @@ const MovieDetail = () => {
         </div>
 
         {/* Call to Action */}
-        {!user && (
+        {(!user || !isAuthenticated()) && (
           <div className="px-4 mb-12">
             <div className="max-w-7xl mx-auto">
               <div className="bg-yellow-500/10 backdrop-blur-xl rounded-3xl shadow-2xl border border-yellow-500/20 p-8 text-center">

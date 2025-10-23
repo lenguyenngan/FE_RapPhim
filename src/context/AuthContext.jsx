@@ -1,12 +1,12 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import API from '../api';
+import React, { createContext, useContext, useState, useEffect } from "react";
+import API from "../api";
 
 const AuthContext = createContext();
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
+    throw new Error("useAuth must be used within an AuthProvider");
   }
   return context;
 };
@@ -20,14 +20,24 @@ export const AuthProvider = ({ children }) => {
   // Check if user is logged in on app start
   useEffect(() => {
     const checkAuth = () => {
-      const storedToken = localStorage.getItem('token');
-      const storedUser = localStorage.getItem('user');
-      const storedRole = localStorage.getItem('role');
+      const storedToken = localStorage.getItem("token");
+      const storedUserRaw = localStorage.getItem("user");
+      let storedRole = localStorage.getItem("role");
 
-      if (storedToken && storedUser && storedRole) {
-        setToken(storedToken);
-        setUser(JSON.parse(storedUser));
-        setRole(storedRole);
+      if (storedToken && storedUserRaw) {
+        try {
+          const parsedUser = JSON.parse(storedUserRaw);
+          if (!storedRole && parsedUser?.role) {
+            storedRole = parsedUser.role;
+            localStorage.setItem("role", storedRole);
+          }
+          setToken(storedToken);
+          setUser(parsedUser);
+          if (storedRole) setRole(storedRole);
+        } catch (_) {
+          localStorage.removeItem("user");
+          localStorage.removeItem("role");
+        }
       }
       setLoading(false);
     };
@@ -38,26 +48,36 @@ export const AuthProvider = ({ children }) => {
   // Login function
   const login = async (email, password) => {
     try {
-      const response = await API.post('/auth/login', { email, password });
-      
+      const response = await API.post("/auth/login", { email, password });
+
       const { token: newToken, user: userData, role: userRole } = response.data;
-      
+
+      console.log("Login successful:", { userData, userRole, newToken });
+
       // Store in localStorage
-      localStorage.setItem('token', newToken);
-      localStorage.setItem('user', JSON.stringify(userData));
-      localStorage.setItem('role', userRole);
-      
+      localStorage.setItem("token", newToken);
+      localStorage.setItem("user", JSON.stringify(userData));
+      localStorage.setItem("role", userRole);
+
       // Update state
       setToken(newToken);
       setUser(userData);
       setRole(userRole);
-      
+
+      console.log("AuthContext state updated:", {
+        user: userData,
+        role: userRole,
+      });
+
       return { success: true, data: response.data };
     } catch (error) {
-      console.error('Login error:', error);
-      return { 
-        success: false, 
-        error: error.response?.data?.message || error.message || 'Đăng nhập thất bại'
+      console.error("Login error:", error);
+      return {
+        success: false,
+        error:
+          error.response?.data?.message ||
+          error.message ||
+          "Đăng nhập thất bại",
       };
     }
   };
@@ -65,13 +85,14 @@ export const AuthProvider = ({ children }) => {
   // Register function
   const register = async (userData) => {
     try {
-      const response = await API.post('/auth/register', userData);
+      const response = await API.post("/auth/register", userData);
       return { success: true, data: response.data };
     } catch (error) {
-      console.error('Register error:', error);
-      return { 
-        success: false, 
-        error: error.response?.data?.message || error.message || 'Đăng ký thất bại'
+      console.error("Register error:", error);
+      return {
+        success: false,
+        error:
+          error.response?.data?.message || error.message || "Đăng ký thất bại",
       };
     }
   };
@@ -79,10 +100,10 @@ export const AuthProvider = ({ children }) => {
   // Logout function
   const logout = () => {
     // Clear localStorage
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    localStorage.removeItem('role');
-    
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+    localStorage.removeItem("role");
+
     // Clear state
     setToken(null);
     setUser(null);
@@ -91,12 +112,12 @@ export const AuthProvider = ({ children }) => {
 
   // Check if user is authenticated
   const isAuthenticated = () => {
-    return !!(token && user && role);
+    return !!(token && user);
   };
 
   // Check if user is admin
   const isAdmin = () => {
-    return role === 'admin' || role === 'superadmin';
+    return role === "admin" || role === "superadmin";
   };
 
   const value = {
@@ -108,12 +129,8 @@ export const AuthProvider = ({ children }) => {
     register,
     logout,
     isAuthenticated,
-    isAdmin
+    isAdmin,
   };
 
-  return (
-    <AuthContext.Provider value={value}>
-      {children}
-    </AuthContext.Provider>
-  );
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
