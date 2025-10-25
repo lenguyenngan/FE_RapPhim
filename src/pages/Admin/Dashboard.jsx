@@ -43,15 +43,48 @@ const Dashboard = () => {
     // Load realtime stats from API
     const loadStats = async () => {
       try {
-        const [usersRes, moviesRes] = await Promise.all([
+        console.log("🔍 Starting to load stats...");
+
+        const [usersRes, moviesRes, bookingsRes] = await Promise.all([
           API.get("/users"),
           API.get("/movies"),
+          API.get("/bookings"), // ✅ API này đã có ở backend
         ]);
+
+        console.log("📊 Users response:", usersRes.data);
+        console.log("🎬 Movies response:", moviesRes.data);
+        console.log("🎫 Bookings response:", bookingsRes.data);
+
         const totalUsers = (usersRes.data?.users || []).length;
         const totalMovies = (moviesRes.data?.movies || []).length;
-        setStats((s) => ({ ...s, totalUsers, totalMovies }));
+        const allBookings = bookingsRes.data?.bookings || [];
+
+        console.log("📈 Total Users:", totalUsers);
+        console.log("📈 Total Movies:", totalMovies);
+        console.log("📈 All Bookings:", allBookings);
+
+        // Tính tổng số vé
+        const totalBookings = allBookings.length;
+
+        // Tính tổng doanh thu (chỉ từ các vé đã được xác nhận)
+        const totalRevenue = allBookings
+          .filter((booking) => booking.status === "confirmed")
+          .reduce((sum, booking) => sum + (booking.total || 0), 0);
+
+        console.log("💰 Total Revenue:", totalRevenue);
+
+        const newStats = {
+          totalUsers,
+          totalMovies,
+          totalBookings,
+          totalRevenue,
+        };
+
+        console.log("✅ Final stats:", newStats);
+        setStats(newStats);
       } catch (e) {
-        console.error("Load stats failed", e);
+        console.error("❌ Load stats failed:", e);
+        console.error("Error details:", e.response?.data || e.message);
       } finally {
         setLoading(false);
       }
@@ -339,9 +372,8 @@ const Dashboard = () => {
                 </div>
               </div>
               <div className="mt-4 flex items-center">
-                <span className="text-green-400 text-sm">+15%</span>
-                <span className="text-gray-400 text-sm ml-2">
-                  so với tháng trước
+                <span className="text-green-400 text-sm">
+                  Từ vé đã xác nhận
                 </span>
               </div>
             </div>
@@ -415,7 +447,10 @@ const Dashboard = () => {
             </div>
 
             {/* Booking Management */}
-            <div className="bg-white/10 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/20 p-6 hover:scale-105 transition-all duration-300 cursor-pointer">
+            <div
+              onClick={() => navigate("/admin/bookings")}
+              className="bg-white/10 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/20 p-6 hover:scale-105 transition-all duration-300 cursor-pointer"
+            >
               <div className="flex items-center mb-4">
                 <div className="w-12 h-12 bg-green-500/20 rounded-xl flex items-center justify-center mr-4">
                   <svg
@@ -435,13 +470,14 @@ const Dashboard = () => {
                 <h3 className="text-xl font-bold text-white">Quản lý đặt vé</h3>
               </div>
               <p className="text-gray-300 mb-4">Xem và quản lý đơn đặt vé</p>
-              <button className="w-full px-4 py-2 bg-green-500/20 border border-green-500/50 rounded-xl text-green-300 hover:bg-green-500/30 transition-all duration-300">
+              <button
+                onClick={() => navigate("/admin/bookings")}
+                className="w-full px-4 py-2 bg-green-500/20 border border-green-500/50 rounded-xl text-green-300 hover:bg-green-500/30 transition-all duration-300"
+              >
                 Quản lý
               </button>
             </div>
           </div>
-
-          {/* Removed database info and role panels as requested */}
         </div>
       </div>
     </div>

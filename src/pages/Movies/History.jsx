@@ -60,16 +60,31 @@ const History = () => {
       return <p className="text-gray-400 italic text-sm">Không có combo</p>;
     }
 
+    // ✅ Tính tổng giá combo
+    const totalCombo = combos.reduce(
+      (sum, c) => sum + (c.price || 0) * (c.quantity || 1),
+      0
+    );
     return (
-      <div className="flex flex-wrap gap-2 mt-1">
-        {combos.map((combo, index) => (
-          <span
-            key={combo._id || index}
-            className="bg-indigo-600/30 border border-indigo-400 text-white px-3 py-1 rounded-full text-sm flex items-center gap-1"
-          >
-            🍿 {combo.name} × {combo.quantity}
-          </span>
-        ))}
+      <div className="mt-2">
+        <div className="flex flex-col gap-1">
+          {combos.map((combo, index) => (
+            <div
+              key={combo._id || index}
+              className="bg-indigo-600/30 border border-indigo-400 text-white px-3 py-2 rounded-lg text-sm flex justify-between items-center"
+            >
+              <span>
+                🍿 {combo.name} × {combo.quantity}
+              </span>
+              <span className="text-green-400 font-medium">
+                {formatCurrency(combo.price * combo.quantity)}
+              </span>
+            </div>
+          ))}
+        </div>
+        <div className="mt-2 text-right text-sm text-yellow-400 font-semibold">
+          Tổng combo: {formatCurrency(totalCombo)}
+        </div>
       </div>
     );
   };
