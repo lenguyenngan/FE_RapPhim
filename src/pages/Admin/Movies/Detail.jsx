@@ -44,7 +44,7 @@ const Detail = () => {
                   Sửa
                 </Link>
                 <button
-                  onClick={() => navigate("/admin/movies")}
+                  onClick={() => navigate("/admin")}
                   className="px-3 py-1 rounded-lg bg-white/10 border border-white/20 text-gray-200 hover:bg-white/20"
                 >
                   Quay lại

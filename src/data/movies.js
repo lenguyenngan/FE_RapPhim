@@ -1,30 +1,6 @@
 // Movies data for frontend
 export const moviesData = [
   {
-    movieId: "M001",
-    title: "Avengers: Endgame",
-    description:
-      "Sau khi Thanos thực hiện Snap và tiêu diệt một nửa vũ trụ, các siêu anh hùng còn lại phải đoàn kết để đảo ngược tình thế và cứu lấy vũ trụ. Đây là phần cuối của câu chuyện Avengers với những trận chiến hoành tráng và cảm xúc sâu sắc.",
-    duration: 181,
-    releaseDate: "2023-04-26",
-    language: "Tiếng Anh - Phụ đề Việt",
-    rating: "C13",
-    genre: ["Hành động", "Phiêu lưu", "Khoa học viễn tưởng"],
-    poster: "/public/images/z0gRHPKq0uX2YY5YqKRLiRCoBqN.webp",
-    trailer: "https://youtube.com/watch?v=TcMBFSGVi1c",
-    director: "Anthony Russo, Joe Russo",
-    cast: [
-      "Robert Downey Jr.",
-      "Chris Evans",
-      "Mark Ruffalo",
-      "Chris Hemsworth",
-    ],
-    imdbRating: 8.4,
-    isHot: true,
-    isComingSoon: false,
-    status: "showing",
-  },
-  {
     movieId: "M002",
     title: "Spider-Man: No Way Home",
     description:

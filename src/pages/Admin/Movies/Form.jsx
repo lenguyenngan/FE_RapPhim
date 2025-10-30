@@ -25,7 +25,6 @@ const empty = {
   cast: "",
   imdbRating: "",
   isHot: false,
-  isComingSoon: false,
   status: "showing",
   // Showtimes to be created with each movie (optional)
   showtimes: [], // { date, clusterId, hallId, startTime, endTime, priceRegular, priceVip }
@@ -35,7 +34,7 @@ const Form = () => {
   const { movieId } = useParams();
   const isEdit = Boolean(movieId);
   const navigate = useNavigate();
-  const { addMovie, updateMovie, getMovieById } = useAdminMovies();
+  const { addMovie, updateMovie, getMovieById, fetchMovies } = useAdminMovies();
 
   const existing = useMemo(
     () => (isEdit ? getMovieById(movieId) : null),
@@ -83,11 +82,46 @@ const Form = () => {
           : existing.cast || "",
         imdbRating: existing.imdbRating ?? "",
         isHot: Boolean(existing.isHot),
-        isComingSoon: Boolean(existing.isComingSoon),
         status: existing.status || "showing",
+        showtimes: existing.showtimes || [], // Load showtimes đã có
       });
     }
   }, [isEdit, existing]);
+
+  // Fetch showtimes khi edit
+  useEffect(() => {
+    const fetchShowtimes = async () => {
+      if (isEdit && movieId) {
+        try {
+          const res = await API.get(`/showtimes?movieId=${movieId}`);
+          const showtimes = res.data.showtimes || [];
+          setValues((prev) => ({
+            ...prev,
+            showtimes: showtimes.map((s) => ({
+              date: s.date,
+              clusterId: s.clusterId,
+              hallId: s.hallId,
+              startTime: s.startTime,
+              endTime: s.endTime,
+              priceRegular: s.priceBySeatType?.regular || s.price || 100000,
+              priceVip: Math.round(
+                (s.priceBySeatType?.regular || s.price || 100000) * 1.4
+              ),
+              priceBySeatType: {
+                regular: s.priceBySeatType?.regular || s.price || 100000,
+                vip:
+                  s.priceBySeatType?.vip ||
+                  Math.round((s.price || 100000) * 1.4),
+              },
+            })),
+          }));
+        } catch (err) {
+          console.log("Could not fetch showtimes:", err);
+        }
+      }
+    };
+    fetchShowtimes();
+  }, [isEdit, movieId]);
 
   // ===== State notify =====
   const [notify, setNotify] = useState(null);
@@ -119,7 +153,7 @@ const Form = () => {
       if (!s.date || !s.clusterId || !s.hallId || !s.startTime || !s.endTime) {
         e[`showtimes_${i}`] = "Thiếu thông tin lịch chiếu";
       }
-      if (Number(s.priceRegular) <= 0 || Number(s.priceVip) <= 0) {
+      if (Number(s.priceRegular) <= 0) {
         e[`showtimes_${i}`] =
           (e[`showtimes_${i}`] ? e[`showtimes_${i}`] + " " : "") +
           "Giá vé phải > 0";
@@ -154,7 +188,6 @@ const Form = () => {
       imdbRating:
         values.imdbRating !== "" ? Number(values.imdbRating) : undefined,
       isHot: Boolean(values.isHot),
-      isComingSoon: Boolean(values.isComingSoon),
       status: values.status,
     };
 
@@ -171,10 +204,10 @@ const Form = () => {
           values.showtimes.map((s) => ({
             ...s,
             priceRegular: Number(s.priceRegular || 0),
-            priceVip: Number(s.priceVip || 0),
+            priceVip: Math.round(Number(s.priceRegular || 0) * 1.4),
             priceBySeatType: {
               regular: Number(s.priceRegular || 0),
-              vip: Number(s.priceVip || 0),
+              vip: Math.round(Number(s.priceRegular || 0) * 1.4),
             },
           }))
         )
@@ -189,13 +222,26 @@ const Form = () => {
     try {
       if (isEdit) {
         await updateMovie(movieId, fd);
+
+        // Xử lý showtimes khi edit
         if ((values.showtimes || []).length) {
+          // Xóa tất cả showtimes cũ của movie này
+          try {
+            await API.delete(`/showtimes/movie/${movieId}`);
+          } catch (err) {
+            console.log("Could not delete old showtimes:", err);
+          }
+
+          // Tạo showtimes mới
           await API.post("/showtimes", {
             movieId,
             showtimes: values.showtimes,
           });
         }
+
         setNotify({ type: "success", msg: "Cập nhật phim thành công" });
+        // Refresh movies data để cập nhật context
+        await fetchMovies();
         navigate(`/admin/movies/${movieId}`);
       } else {
         const created = await addMovie(fd);
@@ -229,7 +275,7 @@ const Form = () => {
           startTime: "",
           endTime: "",
           priceRegular: 100000,
-          priceVip: 140000,
+          priceVip: 140000, // Sẽ được tính lại khi nhập priceRegular
           priceBySeatType: {
             regular: 100000,
             vip: 140000,
@@ -246,11 +292,17 @@ const Form = () => {
           ? {
               ...s,
               [key]: val,
+              // Tự động tính priceVip = priceRegular × 1.4
+              priceVip:
+                key === "priceRegular"
+                  ? Math.round(Number(val) * 1.4)
+                  : s.priceVip,
               priceBySeatType:
                 key === "priceRegular"
-                  ? { ...s.priceBySeatType, regular: Number(val) }
-                  : key === "priceVip"
-                  ? { ...s.priceBySeatType, vip: Number(val) }
+                  ? {
+                      regular: Number(val),
+                      vip: Math.round(Number(val) * 1.4),
+                    }
                   : s.priceBySeatType,
             }
           : s
@@ -483,8 +535,8 @@ const Form = () => {
               />
             </div>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <label className="flex items-center gap-3 text-white">
+          <div className="flex items-center gap-3 text-white">
+            <label className="flex items-center gap-3">
               <input
                 type="checkbox"
                 checked={values.isHot}
@@ -495,18 +547,8 @@ const Form = () => {
               />
               Phim Hot
             </label>
-            <label className="flex items-center gap-3 text-white">
-              <input
-                type="checkbox"
-                checked={values.isComingSoon}
-                onChange={(e) =>
-                  setValues((v) => ({ ...v, isComingSoon: e.target.checked }))
-                }
-                className="accent-purple-500"
-              />
-              Sắp chiếu
-            </label>
           </div>
+
           <div>
             <label className="block text-gray-300 mb-1">Ngày khởi chiếu</label>
             <input
@@ -562,7 +604,7 @@ const Form = () => {
             <select
               value={values.status}
               onChange={onChange("status")}
-              className="w-full px-4 py-2 rounded-xl bg-white/10 border border-white/20 text-white focus:outline-none"
+              className="w-full px-4 py-2 rounded-xl bg-white text-black border border-gray-300 focus:outline-none"
             >
               <option value="showing">Đang chiếu</option>
               <option value="coming_soon">Sắp chiếu</option>
@@ -682,16 +724,6 @@ const Form = () => {
                       }
                       className="w-full px-3 py-2 rounded-lg bg-white/10 border border-white/20 text-white focus:outline-none"
                     />
-                    <input
-                      type="number"
-                      min="0"
-                      placeholder="Giá VIP"
-                      value={s.priceVip}
-                      onChange={(e) =>
-                        updateShowtime(idx, "priceVip", e.target.value)
-                      }
-                      className="w-full px-3 py-2 rounded-lg bg-white/10 border border-white/20 text-white focus:outline-none"
-                    />
                   </div>
                   <div className="md:col-span-7 flex items-center justify-between">
                     {errors[`showtimes_${idx}`] && (
@@ -715,10 +747,10 @@ const Form = () => {
           <div className="flex items-center justify-end gap-3 pt-2">
             <button
               type="button"
-              onClick={() => navigate(-1)}
+              onClick={() => navigate("/admin")}
               className="px-4 py-2 rounded-xl bg-white/10 border border-white/20 text-gray-200 hover:bg-white/20"
             >
-              Hủy
+              Quay lại
             </button>
             <button
               type="submit"
